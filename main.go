@@ -87,8 +87,44 @@ func ejecucion_comando(commandArray []string) {
 	data := strings.ToLower(commandArray[0])
 	if data == "mkdisk" {
 		crear_disco(commandArray)
+	} else if data == "rmdisk" {
+		eliminar_disco(commandArray)
 	} else {
 		fmt.Println("Comando ingresado no es valido")
+	}
+}
+
+//Eliminar Disco
+func eliminar_disco(commandArray []string) {
+	path := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-path=\"") {
+			ultimo := data[len(data)-1:]
+			path = data
+			indice := i + 1
+			for ultimo != "\"" {
+				path += " " + strings.ToLower(commandArray[indice])
+				ultimo = path[len(path)-1:]
+				indice++
+			}
+			i = indice - 1
+			path = strings.Replace(path, "-path=", "", 1)
+			path = strings.Replace(path, "\"", "", 2)
+		} else if strings.Contains(data, "-path=") {
+			path = strings.Replace(data, "-path=", "", 1)
+		}
+	}
+	if path != "" {
+		err := os.Remove(path)
+		if err != nil {
+			fmt.Printf("Error eliminando archivo: %v\n", err)
+		} else {
+			fmt.Println("Eliminado correctamente")
+		}
+	} else {
+		msg_parametrosObligatorios()
 	}
 }
 
@@ -120,9 +156,20 @@ func crear_disco(commandArray []string) {
 		} else if strings.Contains(data, "-fit=") {
 			fit = strings.Replace(data, "-fit=", "", 1)
 			fit = strings.Replace(fit, "\"", "", 2)
+		} else if strings.Contains(data, "-path=\"") {
+			ultimo := data[len(data)-1:]
+			path = data
+			indice := i + 1
+			for ultimo != "\"" {
+				path += " " + strings.ToLower(commandArray[indice])
+				ultimo = path[len(path)-1:]
+				indice++
+			}
+			i = indice - 1
+			path = strings.Replace(path, "-path=", "", 1)
+			path = strings.Replace(path, "\"", "", 2)
 		} else if strings.Contains(data, "-path=") {
 			path = strings.Replace(data, "-path=", "", 1)
-			path = strings.Replace(path, "\"", "", 2)
 		}
 	}
 
