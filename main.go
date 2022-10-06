@@ -25,12 +25,13 @@ type MBR = struct {
 }
 
 type Partition = struct {
-	Status [100]byte
-	Type   [100]byte
-	Fit    [100]byte
-	Start  [100]byte
-	Size   [100]byte
-	Name   [100]byte
+	Status      [100]byte
+	Type        [100]byte
+	Fit         [100]byte
+	Start       [100]byte
+	Size        [100]byte
+	Name        [100]byte
+	Particiones [10]EBR
 }
 
 type EBR = struct {
@@ -101,7 +102,7 @@ func crear_particion(commandArray []string) {
 	tamano := 0
 	dimensional := " "
 	path := ""
-	tipo := ""
+	tipo := " "
 	fit := " "
 	name := ""
 
@@ -156,9 +157,11 @@ func crear_particion(commandArray []string) {
 		if strings.Contains(dimensional, "b") {
 			copy(nuevaP.Size[:], strconv.Itoa(tamano))
 		} else if strings.Contains(dimensional, "k") || strings.Contains(dimensional, " ") {
-			copy(nuevaP.Size[:], strconv.Itoa(tamano*1024))
+			tamano = tamano * 1024
+			copy(nuevaP.Size[:], strconv.Itoa(tamano))
 		} else if strings.Contains(dimensional, "m") {
-			copy(nuevaP.Size[:], strconv.Itoa(tamano*1024*1024))
+			tamano = tamano * 1024 * 1024
+			copy(nuevaP.Size[:], strconv.Itoa(tamano))
 		} else {
 			fmt.Print("Error: Dimensional No Reconocida.")
 		}
@@ -177,9 +180,9 @@ func crear_particion(commandArray []string) {
 		// Tipo de Particion
 		if strings.Contains(tipo, "e") {
 			copy(nuevaP.Type[:], "E")
-		} else if strings.Contains(tipo, "p") || strings.Contains(fit, " ") {
+		} else if strings.Contains(tipo, "p") || strings.Contains(tipo, " ") {
 			copy(nuevaP.Type[:], "P")
-		} else if strings.Contains(fit, "l") {
+		} else if strings.Contains(tipo, "l") {
 			copy(nuevaP.Type[:], "L")
 		} else {
 			fmt.Print("Error: Tipo De Particion No Reconocido.")
@@ -188,24 +191,383 @@ func crear_particion(commandArray []string) {
 		// Nombre de la particion
 		copy(nuevaP.Name[:], name)
 
-		if string(nuevaP.Type[:]) == "P" {
-			if string(mbrleido.Part1.Status[:]) == "F" {
-				mbrleido.Part1 = nuevaP
-			} else if string(mbrleido.Part2.Status[:]) == "F" {
-				mbrleido.Part2 = nuevaP
-			} else if string(mbrleido.Part3.Status[:]) == "F" {
-				mbrleido.Part3 = nuevaP
-			} else if string(mbrleido.Part4.Status[:]) == "F" {
-				mbrleido.Part4 = nuevaP
-			} else {
-				fmt.Print("Error: Ya hay un máximo de 4 particiones activas.")
+		if CToGoString(nuevaP.Type) == "P" { //**************** PRIMARIA *******************
+			creada := false
+			errorp := false
+			// Calculo del tamano de struct en bytes
+			ejm2 := struct_to_bytes(mbrleido)
+			start := len(ejm2)
+
+			fin, err := strconv.Atoi(CToGoString(mbrleido.Tamano))
+			if err != nil {
+				msg_error(err)
 			}
-		} else if string(nuevaP.Type[:]) == "E" {
 
-		} else if string(nuevaP.Type[:]) == "L" {
+			//Ver si part1 esta libre
+			if CToGoString(mbrleido.Part1.Status) == "F" && !creada && !errorp {
+				//Verificar que si haya espacio
+				if start+tamano < fin {
+					start = start + 1
+					copy(nuevaP.Start[:], strconv.Itoa(start))
+					mbrleido.Part1 = nuevaP
+					creada = true
+					fmt.Println("Particion Primaria Creada")
+				} else {
+					fmt.Println("Error -> No hay espacio suficiente para la particion")
+					errorp = true
+				}
+			} else if CToGoString(mbrleido.Part1.Status) == "V" {
+				tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part1.Size))
+				if err != nil {
+					msg_error(err)
+				}
+				start = start + tamanopart
+			}
 
+			//Ver si part2 esta libre
+			if CToGoString(mbrleido.Part2.Status) == "F" && !creada && !errorp {
+				//Verificar que si haya espacio
+				if start+tamano < fin {
+					start = start + 1
+					copy(nuevaP.Start[:], strconv.Itoa(start))
+					mbrleido.Part2 = nuevaP
+					creada = true
+					fmt.Println("Particion Primaria Creada")
+				} else {
+					fmt.Println("Error -> No hay espacio suficiente para la particion")
+					errorp = true
+				}
+			} else if CToGoString(mbrleido.Part2.Status) == "V" {
+				tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part2.Size))
+				if err != nil {
+					msg_error(err)
+				}
+				start = start + tamanopart
+			}
+
+			//Ver si part3 esta libre
+			if CToGoString(mbrleido.Part3.Status) == "F" && !creada && !errorp {
+				//Verificar que si haya espacio
+				if start+tamano < fin {
+					start = start + 1
+					copy(nuevaP.Start[:], strconv.Itoa(start))
+					mbrleido.Part3 = nuevaP
+					creada = true
+					fmt.Println("Particion Primaria Creada")
+				} else {
+					fmt.Println("Error -> No hay espacio suficiente para la particion")
+					errorp = true
+				}
+			} else if CToGoString(mbrleido.Part3.Status) == "V" {
+				tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part3.Size))
+				if err != nil {
+					msg_error(err)
+				}
+				start = start + tamanopart
+			}
+
+			//Ver si part4 esta libre
+			if CToGoString(mbrleido.Part4.Status) == "F" && !creada && !errorp {
+				//Verificar que si haya espacio
+				if start+tamano < fin {
+					start = start + 1
+					copy(nuevaP.Start[:], strconv.Itoa(start))
+					mbrleido.Part4 = nuevaP
+					creada = true
+					fmt.Println("Particion Primaria Creada")
+				} else {
+					fmt.Println("Error -> No hay espacio suficiente para la particion")
+					errorp = true
+				}
+			} else if CToGoString(mbrleido.Part4.Status) == "V" {
+				tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part4.Size))
+				if err != nil {
+					msg_error(err)
+				}
+				start = start + tamanopart
+			}
+
+			if !creada && !errorp {
+				fmt.Println("Error: Ya hay un máximo de 4 particiones activas.")
+			}
+		} else if CToGoString(nuevaP.Type) == "E" { //**************** EXTENDIDA ***************
+
+			if CToGoString(mbrleido.Part1.Type) == "E" || CToGoString(mbrleido.Part2.Type) == "E" || CToGoString(mbrleido.Part3.Type) == "E" || CToGoString(mbrleido.Part4.Type) == "E" {
+				fmt.Println("Error: Ya existe un máximo de 1 partición extendida.")
+			} else {
+				creada := false
+				errorp := false
+				// Calculo del tamano de struct en bytes
+				ejm2 := struct_to_bytes(mbrleido)
+				start := len(ejm2)
+
+				fin, err := strconv.Atoi(CToGoString(mbrleido.Tamano))
+				if err != nil {
+					msg_error(err)
+				}
+
+				//Ver si part1 esta libre
+				if CToGoString(mbrleido.Part1.Status) == "F" && !creada && !errorp {
+					//Verificar que si haya espacio
+					if start+tamano < fin {
+						start = start + 1
+						copy(nuevaP.Start[:], strconv.Itoa(start))
+						mbrleido.Part1 = nuevaP
+						creada = true
+						fmt.Println("Particion Extendida Creada")
+					} else {
+						fmt.Println("Error -> No hay espacio suficiente para la particion")
+						errorp = true
+					}
+				} else if CToGoString(mbrleido.Part1.Status) == "V" {
+					tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part1.Size))
+					if err != nil {
+						msg_error(err)
+					}
+					start = start + tamanopart
+				}
+
+				//Ver si part2 esta libre
+				if CToGoString(mbrleido.Part2.Status) == "F" && !creada && !errorp {
+					//Verificar que si haya espacio
+					if start+tamano < fin {
+						start = start + 1
+						copy(nuevaP.Start[:], strconv.Itoa(start))
+						mbrleido.Part2 = nuevaP
+						creada = true
+						fmt.Println("Particion Extendida Creada")
+					} else {
+						fmt.Println("Error -> No hay espacio suficiente para la particion")
+						errorp = true
+					}
+				} else if CToGoString(mbrleido.Part2.Status) == "V" {
+					tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part2.Size))
+					if err != nil {
+						msg_error(err)
+					}
+					start = start + tamanopart
+				}
+
+				//Ver si part3 esta libre
+				if CToGoString(mbrleido.Part3.Status) == "F" && !creada && !errorp {
+					//Verificar que si haya espacio
+					if start+tamano < fin {
+						start = start + 1
+						copy(nuevaP.Start[:], strconv.Itoa(start))
+						mbrleido.Part3 = nuevaP
+						creada = true
+						fmt.Println("Particion Extendida Creada")
+					} else {
+						fmt.Println("Error -> No hay espacio suficiente para la particion")
+						errorp = true
+					}
+				} else if CToGoString(mbrleido.Part3.Status) == "V" {
+					tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part3.Size))
+					if err != nil {
+						msg_error(err)
+					}
+					start = start + tamanopart
+				}
+
+				//Ver si part4 esta libre
+				if CToGoString(mbrleido.Part4.Status) == "F" && !creada && !errorp {
+					//Verificar que si haya espacio
+					if start+tamano < fin {
+						start = start + 1
+						copy(nuevaP.Start[:], strconv.Itoa(start))
+						mbrleido.Part4 = nuevaP
+						creada = true
+						fmt.Println("Particion Extendida Creada")
+					} else {
+						fmt.Println("Error -> No hay espacio suficiente para la particion")
+						errorp = true
+					}
+				} else if CToGoString(mbrleido.Part4.Status) == "V" {
+					tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part4.Size))
+					if err != nil {
+						msg_error(err)
+					}
+					start = start + tamanopart
+				}
+
+				if !creada && !errorp {
+					fmt.Println("Error: Ya hay un máximo de 4 particiones activas.")
+				}
+			}
+		} else if CToGoString(nuevaP.Type) == "L" {
+			nuevoebr := EBR{}
+			nuevoebr.Status = nuevaP.Status
+			nuevoebr.Fit = nuevaP.Fit
+			nuevoebr.Size = nuevaP.Size
+			copy(nuevoebr.Next[:], "-1")
+			nuevoebr.Name = nuevaP.Name
+
+			if CToGoString(mbrleido.Part1.Type) == "E" {
+				tamanoParticion, err := strconv.Atoi(CToGoString(mbrleido.Part1.Size))
+				if err != nil {
+					msg_error(err)
+				}
+				for i := 0; i < len(mbrleido.Part1.Particiones); i++ {
+					if CToGoString(mbrleido.Part1.Particiones[i].Status) != "V" {
+						if i > 0 {
+							ultimo := i - 1
+							ultimostart, err := strconv.Atoi(CToGoString(mbrleido.Part1.Particiones[ultimo].Start))
+							if err != nil {
+								msg_error(err)
+							}
+							ultimotamano, err := strconv.Atoi(CToGoString(mbrleido.Part1.Particiones[ultimo].Size))
+							if err != nil {
+								msg_error(err)
+							}
+
+							if ultimostart+ultimotamano+tamano <= tamanoParticion {
+								copy(nuevoebr.Start[:], strconv.Itoa(ultimostart+ultimotamano+1))
+								copy(mbrleido.Part1.Particiones[ultimo].Next[:], strconv.Itoa(ultimostart+ultimotamano+1))
+								mbrleido.Part1.Particiones[i] = nuevoebr
+								fmt.Println("Partición Logica Creada")
+							} else {
+								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+							}
+
+						} else {
+							copy(nuevoebr.Start[:], "0")
+							if tamano <= tamanoParticion {
+								mbrleido.Part1.Particiones[i] = nuevoebr
+								fmt.Println("Partición Logica Creada")
+							} else {
+								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+							}
+						}
+						break
+					}
+				}
+			} else if CToGoString(mbrleido.Part2.Type) == "E" {
+				tamanoParticion, err := strconv.Atoi(CToGoString(mbrleido.Part2.Size))
+				if err != nil {
+					msg_error(err)
+				}
+				for i := 0; i < len(mbrleido.Part2.Particiones); i++ {
+					if CToGoString(mbrleido.Part2.Particiones[i].Status) != "V" {
+						if i > 0 {
+							ultimo := i - 1
+							ultimostart, err := strconv.Atoi(CToGoString(mbrleido.Part2.Particiones[ultimo].Start))
+							if err != nil {
+								msg_error(err)
+							}
+							ultimotamano, err := strconv.Atoi(CToGoString(mbrleido.Part2.Particiones[ultimo].Size))
+							if err != nil {
+								msg_error(err)
+							}
+
+							if ultimostart+ultimotamano+tamano <= tamanoParticion {
+								copy(nuevoebr.Start[:], strconv.Itoa(ultimostart+ultimotamano+1))
+								copy(mbrleido.Part2.Particiones[ultimo].Next[:], strconv.Itoa(ultimostart+ultimotamano+1))
+								mbrleido.Part2.Particiones[i] = nuevoebr
+								fmt.Println("Partición Logica Creada")
+							} else {
+								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+							}
+
+						} else {
+							copy(nuevoebr.Start[:], "0")
+							if tamano <= tamanoParticion {
+								mbrleido.Part2.Particiones[i] = nuevoebr
+								fmt.Println("Partición Logica Creada")
+							} else {
+								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+							}
+						}
+						break
+					}
+				}
+			} else if CToGoString(mbrleido.Part3.Type) == "E" {
+				tamanoParticion, err := strconv.Atoi(CToGoString(mbrleido.Part3.Size))
+				if err != nil {
+					msg_error(err)
+				}
+				for i := 0; i < len(mbrleido.Part3.Particiones); i++ {
+					if CToGoString(mbrleido.Part3.Particiones[i].Status) != "V" {
+						if i > 0 {
+							ultimo := i - 1
+							ultimostart, err := strconv.Atoi(CToGoString(mbrleido.Part3.Particiones[ultimo].Start))
+							if err != nil {
+								msg_error(err)
+							}
+							ultimotamano, err := strconv.Atoi(CToGoString(mbrleido.Part3.Particiones[ultimo].Size))
+							if err != nil {
+								msg_error(err)
+							}
+
+							if ultimostart+ultimotamano+tamano <= tamanoParticion {
+								copy(nuevoebr.Start[:], strconv.Itoa(ultimostart+ultimotamano+1))
+								copy(mbrleido.Part3.Particiones[ultimo].Next[:], strconv.Itoa(ultimostart+ultimotamano+1))
+								mbrleido.Part3.Particiones[i] = nuevoebr
+								fmt.Println("Partición Logica Creada")
+							} else {
+								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+							}
+
+						} else {
+							copy(nuevoebr.Start[:], "0")
+							if tamano <= tamanoParticion {
+								mbrleido.Part3.Particiones[i] = nuevoebr
+								fmt.Println("Partición Logica Creada")
+							} else {
+								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+							}
+						}
+						break
+					}
+				}
+			} else if CToGoString(mbrleido.Part4.Type) == "E" {
+				tamanoParticion, err := strconv.Atoi(CToGoString(mbrleido.Part4.Size))
+				if err != nil {
+					msg_error(err)
+				}
+				for i := 0; i < len(mbrleido.Part4.Particiones); i++ {
+					if CToGoString(mbrleido.Part4.Particiones[i].Status) != "V" {
+						if i > 0 {
+							ultimo := i - 1
+							ultimostart, err := strconv.Atoi(CToGoString(mbrleido.Part4.Particiones[ultimo].Start))
+							if err != nil {
+								msg_error(err)
+							}
+							ultimotamano, err := strconv.Atoi(CToGoString(mbrleido.Part4.Particiones[ultimo].Size))
+							if err != nil {
+								msg_error(err)
+							}
+
+							if ultimostart+ultimotamano+tamano <= tamanoParticion {
+								copy(nuevoebr.Start[:], strconv.Itoa(ultimostart+ultimotamano+1))
+								copy(mbrleido.Part4.Particiones[ultimo].Next[:], strconv.Itoa(ultimostart+ultimotamano+1))
+								mbrleido.Part4.Particiones[i] = nuevoebr
+								fmt.Println("Partición Logica Creada")
+							} else {
+								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+							}
+
+						} else {
+							copy(nuevoebr.Start[:], "0")
+							if tamano <= tamanoParticion {
+								mbrleido.Part4.Particiones[i] = nuevoebr
+								fmt.Println("Partición Logica Creada")
+							} else {
+								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+							}
+						}
+						break
+					}
+				}
+			} else {
+				fmt.Print("Error: No existe partición extendida.")
+			}
+
+		} else {
+			fmt.Println("Error: Tipo de particion no existe -> ")
+			tt := CToGoString(nuevaP.Type)
+			fmt.Println(tt)
 		}
-
+		escribirMBR(mbrleido, path)
 	} else {
 		msg_parametrosObligatorios()
 	}
@@ -464,4 +826,16 @@ func crearDirectorioSiNoExiste(directorio string) {
 			panic(err)
 		}
 	}
+}
+
+//Byte[] a string puro
+func CToGoString(c [100]byte) string {
+	n := -1
+	for i, b := range c {
+		if b == 0 {
+			break
+		}
+		n = i
+	}
+	return string(c[:n+1])
 }
