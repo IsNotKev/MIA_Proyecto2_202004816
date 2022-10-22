@@ -1,16 +1,20 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/cors"
 )
 
 type MBR = struct {
@@ -43,29 +47,76 @@ type EBR = struct {
 	Next   [100]byte
 }
 
-func main() {
-	analizar()
+type DiscoMontado = struct {
+	path string
+	name string
+	id   string
+	mbr  MBR
 }
 
-func analizar() {
-	finalizar := false
-	reader := bufio.NewReader(os.Stdin)
-	//  Ciclo para lectura de multiples comandos
-	for !finalizar {
-		fmt.Print("[MIA]@Proyecto2:~$  ")
-		comando, _ := reader.ReadString('\n')
-		if strings.Contains(comando, "exit") {
-			finalizar = true
-		} else {
-			if comando != "" && comando != "exit\n" {
-				//  Separacion de comando y parametros
-				split_comando(comando)
-			}
+type cmdstruct struct {
+	Cmd string `json:"cmd"`
+}
+
+var discos = [20]DiscoMontado{} //Discos Montados
+
+func main() {
+	//analizar()
+	fmt.Println("MIA - T4, API Rest GO")
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/ejecutar", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var Content cmdstruct
+		respuesta := "Conectado"
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &Content)
+
+		respuesta = analizar(Content.Cmd)
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"result": "` + respuesta + `" }`))
+	})
+
+	fmt.Println("Server ON in port 5000")
+	handler := cors.Default().Handler(mux)
+	log.Fatal(http.ListenAndServe(":5000", handler))
+}
+
+func analizar(cmd string) string {
+
+	instrucciones := strings.Split(cmd, "\n")
+	salida := ""
+	//finalizar := false
+	//reader := bufio.NewReader(os.Stdin)
+	////  Ciclo para lectura de multiples comandos
+	//for !finalizar {
+	//	fmt.Print("[MIA]@Proyecto2:~$  ")
+	//	comando, _ := reader.ReadString('\n')
+	//	if strings.Contains(comando, "exit") {
+	//		finalizar = true
+	//	} else {
+	//		if comando != "" && comando != "exit\n" {
+	//			//  Separacion de comando y parametros
+	//			split_comando(comando)
+	//		}
+	//	}
+	//}
+
+	for i := 0; i < len(instrucciones); i++ {
+		comando := instrucciones[i]
+		if comando != "" && comando != "exit\n" {
+			//  Separacion de comando y parametros
+			salida += split_comando(comando) + "\\n"
 		}
 	}
+
+	fmt.Println(salida)
+
+	return salida
 }
 
-func split_comando(comando string) {
+func split_comando(comando string) string {
 	var commandArray []string
 	// Eliminacion de saltos de linea
 	comando = strings.Replace(comando, "\n", "", 1)
@@ -80,25 +131,77 @@ func split_comando(comando string) {
 	commandArray = strings.Split(comando, " ")
 
 	// Ejecicion de comando leido
-	ejecucion_comando(commandArray)
+	return ejecucion_comando(commandArray)
 }
 
-func ejecucion_comando(commandArray []string) {
+func ejecucion_comando(commandArray []string) string {
 	// Identificacion de comando y ejecucion
 	data := strings.ToLower(commandArray[0])
 	if data == "mkdisk" {
-		crear_disco(commandArray)
+		return crear_disco(commandArray)
 	} else if data == "rmdisk" {
-		eliminar_disco(commandArray)
+		return eliminar_disco(commandArray)
 	} else if data == "fdisk" {
-		crear_particion(commandArray)
+		return crear_particion(commandArray)
+	} else if data == "mount" {
+		return montar_disco(commandArray)
 	} else {
 		fmt.Println("Comando ingresado no es valido")
+		return "Comando ingresado no es valido"
+	}
+}
+
+//Montar Disco
+func montar_disco(commandArray []string) string {
+	path := ""
+	name := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-path=\"") {
+			ultimo := data[len(data)-1:]
+			path = data
+			indice := i + 1
+			for ultimo != "\"" {
+				path += " " + strings.ToLower(commandArray[indice])
+				ultimo = path[len(path)-1:]
+				indice++
+			}
+			i = indice - 1
+			path = strings.Replace(path, "-path=", "", 1)
+			path = strings.Replace(path, "\"", "", 2)
+		} else if strings.Contains(data, "-path=") {
+			path = strings.Replace(data, "-path=", "", 1)
+		} else if strings.Contains(data, "-name=") {
+			name = strings.Replace(data, "-name=", "", 1)
+			name = strings.Replace(name, "\"", "", 2)
+		}
+	}
+
+	if path != "" && name != "" {
+		mbrleido := leerMBR(path)
+		nuevoDisco := DiscoMontado{}
+
+		nuevoDisco.mbr = mbrleido
+		nuevoDisco.name = name
+		nuevoDisco.path = path
+
+		cont := 0
+		for i := 0; i < len(discos); i++ {
+			if discos[i].path == "" {
+
+			} else if discos[i].path == path {
+				cont++
+			}
+		}
+		return "Disco montado."
+	} else {
+		return msg_parametrosObligatorios()
 	}
 }
 
 //Crear Particion
-func crear_particion(commandArray []string) {
+func crear_particion(commandArray []string) string {
 	tamano := 0
 	dimensional := " "
 	path := ""
@@ -164,6 +267,7 @@ func crear_particion(commandArray []string) {
 			copy(nuevaP.Size[:], strconv.Itoa(tamano))
 		} else {
 			fmt.Print("Error: Dimensional No Reconocida.")
+			return "Error -> Dimensional No Reconocida."
 		}
 
 		// Calculo de FIT
@@ -175,6 +279,7 @@ func crear_particion(commandArray []string) {
 			copy(nuevaP.Fit[:], "WF")
 		} else {
 			fmt.Print("Error: Fit No Reconocido.")
+			return "Error -> Fit No Reconocido."
 		}
 
 		// Tipo de Particion
@@ -186,6 +291,7 @@ func crear_particion(commandArray []string) {
 			copy(nuevaP.Type[:], "L")
 		} else {
 			fmt.Print("Error: Tipo De Particion No Reconocido.")
+			return "Error -> Tipo De Particion No Reconocido."
 		}
 
 		// Nombre de la particion
@@ -215,6 +321,7 @@ func crear_particion(commandArray []string) {
 				} else {
 					fmt.Println("Error -> No hay espacio suficiente para la particion")
 					errorp = true
+					return "Error -> No hay espacio suficiente para la particion"
 				}
 			} else if CToGoString(mbrleido.Part1.Status) == "V" {
 				tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part1.Size))
@@ -222,6 +329,12 @@ func crear_particion(commandArray []string) {
 					msg_error(err)
 				}
 				start = start + tamanopart
+
+				if name == CToGoString(mbrleido.Part1.Name) {
+					fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+					errorp = true
+					return "Error -> El nombre no puede repetise dentro de las particiones"
+				}
 			}
 
 			//Ver si part2 esta libre
@@ -236,6 +349,7 @@ func crear_particion(commandArray []string) {
 				} else {
 					fmt.Println("Error -> No hay espacio suficiente para la particion")
 					errorp = true
+					return "Error -> No hay espacio suficiente para la particion"
 				}
 			} else if CToGoString(mbrleido.Part2.Status) == "V" {
 				tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part2.Size))
@@ -243,6 +357,12 @@ func crear_particion(commandArray []string) {
 					msg_error(err)
 				}
 				start = start + tamanopart
+
+				if name == CToGoString(mbrleido.Part2.Name) {
+					fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+					errorp = true
+					return "Error -> El nombre no puede repetise dentro de las particiones"
+				}
 			}
 
 			//Ver si part3 esta libre
@@ -257,6 +377,7 @@ func crear_particion(commandArray []string) {
 				} else {
 					fmt.Println("Error -> No hay espacio suficiente para la particion")
 					errorp = true
+					return "Error -> No hay espacio suficiente para la particion"
 				}
 			} else if CToGoString(mbrleido.Part3.Status) == "V" {
 				tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part3.Size))
@@ -264,6 +385,12 @@ func crear_particion(commandArray []string) {
 					msg_error(err)
 				}
 				start = start + tamanopart
+
+				if name == CToGoString(mbrleido.Part3.Name) {
+					fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+					errorp = true
+					return "Error -> El nombre no puede repetise dentro de las particiones"
+				}
 			}
 
 			//Ver si part4 esta libre
@@ -278,6 +405,7 @@ func crear_particion(commandArray []string) {
 				} else {
 					fmt.Println("Error -> No hay espacio suficiente para la particion")
 					errorp = true
+					return "Error -> No hay espacio suficiente para la particion"
 				}
 			} else if CToGoString(mbrleido.Part4.Status) == "V" {
 				tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part4.Size))
@@ -285,15 +413,23 @@ func crear_particion(commandArray []string) {
 					msg_error(err)
 				}
 				start = start + tamanopart
+
+				if name == CToGoString(mbrleido.Part4.Name) {
+					fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+					errorp = true
+					return "Error -> El nombre no puede repetise dentro de las particiones"
+				}
 			}
 
 			if !creada && !errorp {
 				fmt.Println("Error: Ya hay un máximo de 4 particiones activas.")
+				return "Error: Ya hay un máximo de 4 particiones activas."
 			}
 		} else if CToGoString(nuevaP.Type) == "E" { //**************** EXTENDIDA ***************
 
 			if CToGoString(mbrleido.Part1.Type) == "E" || CToGoString(mbrleido.Part2.Type) == "E" || CToGoString(mbrleido.Part3.Type) == "E" || CToGoString(mbrleido.Part4.Type) == "E" {
 				fmt.Println("Error: Ya existe un máximo de 1 partición extendida.")
+				return "Error -> Ya existe un máximo de 1 partición extendida."
 			} else {
 				creada := false
 				errorp := false
@@ -318,6 +454,7 @@ func crear_particion(commandArray []string) {
 					} else {
 						fmt.Println("Error -> No hay espacio suficiente para la particion")
 						errorp = true
+						return "Error -> No hay espacio suficiente para la particion"
 					}
 				} else if CToGoString(mbrleido.Part1.Status) == "V" {
 					tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part1.Size))
@@ -325,6 +462,12 @@ func crear_particion(commandArray []string) {
 						msg_error(err)
 					}
 					start = start + tamanopart
+
+					if name == CToGoString(mbrleido.Part1.Name) {
+						fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+						errorp = true
+						return "Error -> El nombre no puede repetise dentro de las particiones"
+					}
 				}
 
 				//Ver si part2 esta libre
@@ -339,6 +482,7 @@ func crear_particion(commandArray []string) {
 					} else {
 						fmt.Println("Error -> No hay espacio suficiente para la particion")
 						errorp = true
+						return "Error -> No hay espacio suficiente para la particion"
 					}
 				} else if CToGoString(mbrleido.Part2.Status) == "V" {
 					tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part2.Size))
@@ -346,6 +490,12 @@ func crear_particion(commandArray []string) {
 						msg_error(err)
 					}
 					start = start + tamanopart
+
+					if name == CToGoString(mbrleido.Part2.Name) {
+						fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+						errorp = true
+						return "Error -> El nombre no puede repetise dentro de las particiones"
+					}
 				}
 
 				//Ver si part3 esta libre
@@ -360,6 +510,7 @@ func crear_particion(commandArray []string) {
 					} else {
 						fmt.Println("Error -> No hay espacio suficiente para la particion")
 						errorp = true
+						return "Error -> No hay espacio suficiente para la particion"
 					}
 				} else if CToGoString(mbrleido.Part3.Status) == "V" {
 					tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part3.Size))
@@ -367,6 +518,12 @@ func crear_particion(commandArray []string) {
 						msg_error(err)
 					}
 					start = start + tamanopart
+
+					if name == CToGoString(mbrleido.Part3.Name) {
+						fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+						errorp = true
+						return "Error -> El nombre no puede repetise dentro de las particiones"
+					}
 				}
 
 				//Ver si part4 esta libre
@@ -381,6 +538,7 @@ func crear_particion(commandArray []string) {
 					} else {
 						fmt.Println("Error -> No hay espacio suficiente para la particion")
 						errorp = true
+						return "Error -> No hay espacio suficiente para la particion"
 					}
 				} else if CToGoString(mbrleido.Part4.Status) == "V" {
 					tamanopart, err := strconv.Atoi(CToGoString(mbrleido.Part4.Size))
@@ -388,10 +546,17 @@ func crear_particion(commandArray []string) {
 						msg_error(err)
 					}
 					start = start + tamanopart
+
+					if name == CToGoString(mbrleido.Part4.Name) {
+						fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+						errorp = true
+						return "Error -> El nombre no puede repetise dentro de las particiones"
+					}
 				}
 
 				if !creada && !errorp {
 					fmt.Println("Error: Ya hay un máximo de 4 particiones activas.")
+					return "Error -> Ya hay un máximo de 4 particiones activas."
 				}
 			}
 		} else if CToGoString(nuevaP.Type) == "L" {
@@ -427,6 +592,7 @@ func crear_particion(commandArray []string) {
 								fmt.Println("Partición Logica Creada")
 							} else {
 								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+								return "Error -> No hay almacenamiento para nueva partición lógica"
 							}
 
 						} else {
@@ -436,9 +602,13 @@ func crear_particion(commandArray []string) {
 								fmt.Println("Partición Logica Creada")
 							} else {
 								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+								return "Error -> No hay almacenamiento para nueva partición lógica"
 							}
 						}
 						break
+					} else if name == CToGoString(mbrleido.Part1.Particiones[i].Name) {
+						fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+						return "Error -> El nombre no puede repetise dentro de las particiones"
 					}
 				}
 			} else if CToGoString(mbrleido.Part2.Type) == "E" {
@@ -466,6 +636,7 @@ func crear_particion(commandArray []string) {
 								fmt.Println("Partición Logica Creada")
 							} else {
 								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+								return "Error -> No hay almacenamiento para nueva partición lógica"
 							}
 
 						} else {
@@ -475,9 +646,13 @@ func crear_particion(commandArray []string) {
 								fmt.Println("Partición Logica Creada")
 							} else {
 								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+								return "Error -> No hay almacenamiento para nueva partición lógica"
 							}
 						}
 						break
+					} else if name == CToGoString(mbrleido.Part2.Particiones[i].Name) {
+						fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+						return "Error -> El nombre no puede repetise dentro de las particiones"
 					}
 				}
 			} else if CToGoString(mbrleido.Part3.Type) == "E" {
@@ -505,6 +680,7 @@ func crear_particion(commandArray []string) {
 								fmt.Println("Partición Logica Creada")
 							} else {
 								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+								return "Error -> No hay almacenamiento para nueva partición lógica"
 							}
 
 						} else {
@@ -514,9 +690,13 @@ func crear_particion(commandArray []string) {
 								fmt.Println("Partición Logica Creada")
 							} else {
 								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+								return "Error -> No hay almacenamiento para nueva partición lógica"
 							}
 						}
 						break
+					} else if name == CToGoString(mbrleido.Part3.Particiones[i].Name) {
+						fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+						return "Error -> El nombre no puede repetise dentro de las particiones"
 					}
 				}
 			} else if CToGoString(mbrleido.Part4.Type) == "E" {
@@ -544,6 +724,7 @@ func crear_particion(commandArray []string) {
 								fmt.Println("Partición Logica Creada")
 							} else {
 								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+								return "Error-> No hay almacenamiento para nueva partición lógica"
 							}
 
 						} else {
@@ -552,24 +733,31 @@ func crear_particion(commandArray []string) {
 								mbrleido.Part4.Particiones[i] = nuevoebr
 								fmt.Println("Partición Logica Creada")
 							} else {
-								fmt.Println("Error: No hay almacenamiento para nueva partición lógica")
+								fmt.Println("Error -> No hay almacenamiento para nueva partición lógica")
+								return "Error -> No hay almacenamiento para nueva partición lógica"
 							}
 						}
 						break
+					} else if name == CToGoString(mbrleido.Part4.Particiones[i].Name) {
+						fmt.Println("Error -> El nombre no puede repetise dentro de las particiones")
+						return "Error -> El nombre no puede repetise dentro de las particiones"
 					}
 				}
 			} else {
 				fmt.Print("Error: No existe partición extendida.")
+				return "Error -> No existe partición extendida."
 			}
 
 		} else {
 			fmt.Println("Error: Tipo de particion no existe -> ")
 			tt := CToGoString(nuevaP.Type)
 			fmt.Println(tt)
+			return "Error -> Tipo de particion no existe -> " + tt
 		}
 		escribirMBR(mbrleido, path)
+		return "> Partición " + tipo + " creada."
 	} else {
-		msg_parametrosObligatorios()
+		return msg_parametrosObligatorios()
 	}
 }
 
@@ -628,7 +816,7 @@ func escribirMBR(mbr MBR, ruta string) {
 }
 
 //Eliminar Disco
-func eliminar_disco(commandArray []string) {
+func eliminar_disco(commandArray []string) string {
 	path := ""
 	// Lectura de parametros del comando
 	for i := 0; i < len(commandArray); i++ {
@@ -653,16 +841,18 @@ func eliminar_disco(commandArray []string) {
 		err := os.Remove(path)
 		if err != nil {
 			fmt.Printf("Error eliminando archivo: %v\n", err)
+			return "<Error> eliminando archivo:"
 		} else {
 			fmt.Println("Eliminado correctamente")
+			return "> Disco eliminado correctamente."
 		}
 	} else {
-		msg_parametrosObligatorios()
+		return msg_parametrosObligatorios()
 	}
 }
 
 // crear_disco -tamaño=numero -dimensional=dimension/"dimension"
-func crear_disco(commandArray []string) {
+func crear_disco(commandArray []string) string {
 	tamano := 0
 	dimensional := " "
 	fit := " "
@@ -717,6 +907,7 @@ func crear_disco(commandArray []string) {
 			copy(nmbr.Tamano[:], strconv.Itoa(tamano_archivo*1024))
 		} else {
 			fmt.Print("Error: Dimensional No Reconocida.")
+			return "Error: Dimensional No Reconocida."
 		}
 
 		// Calculo de FIT
@@ -728,6 +919,7 @@ func crear_disco(commandArray []string) {
 			copy(nmbr.Fit[:], "WF")
 		} else {
 			fmt.Print("Error: Fit No Reconocido.")
+			return "Error: Fit No Reconocido."
 		}
 
 		// Preparacion del bloque a escribir en archivo
@@ -782,9 +974,9 @@ func crear_disco(commandArray []string) {
 		fmt.Print(tamano)
 		fmt.Print(" Dimensional: ")
 		fmt.Println(dimensional)
-
+		return "> Se creo el disco correctamente."
 	} else {
-		msg_parametrosObligatorios()
+		return msg_parametrosObligatorios()
 	}
 }
 
@@ -814,8 +1006,9 @@ func msg_error(err error) {
 	fmt.Println("Error: ", err)
 }
 
-func msg_parametrosObligatorios() {
+func msg_parametrosObligatorios() string {
 	fmt.Println("Error: Parametros Obligatorios No Definidos.")
+	return "Error: Parametros Obligatorios No Definidos."
 }
 
 func crearDirectorioSiNoExiste(directorio string) {
