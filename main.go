@@ -13,7 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
+	"github.com/goccy/go-graphviz"
 	"github.com/rs/cors"
 )
 
@@ -147,16 +149,23 @@ func ejecucion_comando(commandArray []string) string {
 		return crear_particion(commandArray)
 	} else if data == "mount" {
 		return montar_disco(commandArray)
+	} else if data == "pause" {
+		return "Pausa ..."
+	} else if data == "rep" {
+		return procesarRep(commandArray)
 	} else {
 		fmt.Println("Comando ingresado no es valido")
 		return "Comando ingresado no es valido"
 	}
 }
 
-//Montar Disco
-func montar_disco(commandArray []string) string {
+//Reportes
+func procesarRep(commandArray []string) string {
 	path := ""
 	name := ""
+	id := ""
+	ruta := ""
+
 	// Lectura de parametros del comando
 	for i := 0; i < len(commandArray); i++ {
 		data := strings.ToLower(commandArray[i])
@@ -177,6 +186,176 @@ func montar_disco(commandArray []string) string {
 		} else if strings.Contains(data, "-name=") {
 			name = strings.Replace(data, "-name=", "", 1)
 			name = strings.Replace(name, "\"", "", 2)
+		} else if strings.Contains(data, "-id=") {
+			id = strings.Replace(data, "-id=", "", 1)
+			id = strings.Replace(id, "\"", "", 2)
+		} else if strings.Contains(data, "-ruta=") {
+			ruta = strings.Replace(data, "-ruta=", "", 1)
+			ruta = strings.Replace(ruta, "\"", "", 2)
+		}
+	}
+
+	if name != "" && path != "" && id != "" {
+		if name == "disk" {
+			repDisk(path, id)
+			return "Reporte Disk Creado"
+		} else if name == "tree" {
+			return "Reporte Tree Creado"
+		} else if name == "file" {
+			return "Reporte File Creado"
+		} else if name == "sb" {
+			return "Reporte SB Creado"
+		}
+		return "Reporte no encontrado."
+	} else {
+		return msg_parametrosObligatorios()
+	}
+}
+
+func repDisk(path string, id string) {
+	for i := 0; i < len(discos); i++ {
+		if discos[i].id == id {
+			mbrleido := leerMBR(discos[i].path)
+			particionesaux := [4]Partition{}
+			particionesaux[0] = mbrleido.Part1
+			particionesaux[1] = mbrleido.Part2
+			particionesaux[2] = mbrleido.Part3
+			particionesaux[3] = mbrleido.Part4
+
+			g := graphviz.New()
+			graph, err := g.Graph()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// create your graph
+			n, err := graph.CreateNode("n")
+			if err != nil {
+				log.Fatal(err)
+			}
+			n.SetShape("record")
+
+			text := "MBR"
+
+			inicio := int(unsafe.Sizeof(mbrleido))
+			for i := 0; i < 4; i++ {
+				if CToGoString(particionesaux[i].Status) == "V" {
+
+					if CToGoString(particionesaux[i].Type) == "P" {
+						t, err := strconv.Atoi(CToGoString(particionesaux[i].Size))
+						if err != nil {
+							msg_error(err)
+						}
+						tt, err := strconv.Atoi(CToGoString(mbrleido.Tamano))
+						if err != nil {
+							msg_error(err)
+						}
+						percent := float64(t) / float64(tt)
+						percent = percent * 100
+						text += " | Primaria " + fmt.Sprintf("%.2f", percent) + "%"
+					} else if CToGoString(particionesaux[i].Type) == "E" {
+						text += " | {{Extendida}|{"
+
+						for j := 0; j < 10; j++ {
+							if CToGoString(particionesaux[i].Particiones[j].Status) == "V" {
+								t, err := strconv.Atoi(CToGoString(particionesaux[i].Particiones[j].Size))
+								if err != nil {
+									msg_error(err)
+								}
+								tt, err := strconv.Atoi(CToGoString(mbrleido.Tamano))
+								if err != nil {
+									msg_error(err)
+								}
+								percent := float64(t) / float64(tt)
+								percent = percent * 100
+								text += "EBR | Lógica " + fmt.Sprintf("%.2f", percent) + "%|"
+							}
+
+						}
+						text += "}}"
+					}
+
+					st, err := strconv.Atoi(CToGoString(particionesaux[i].Start))
+					if err != nil {
+						msg_error(err)
+					}
+					tam, err := strconv.Atoi(CToGoString(particionesaux[i].Size))
+					if err != nil {
+						msg_error(err)
+					}
+					inicio = st + tam + 1
+				} else if i == 3 {
+					t, err := strconv.Atoi(CToGoString(mbrleido.Tamano))
+					if err != nil {
+						msg_error(err)
+					}
+					t = t - int(inicio)
+					tt, err := strconv.Atoi(CToGoString(mbrleido.Tamano))
+					if err != nil {
+						msg_error(err)
+					}
+					percent := float64(t) / float64(tt)
+					percent = percent * 100
+
+					text += " | Libre " + fmt.Sprintf("%.2f", percent) + "%"
+				}
+			}
+
+			n.SetLabel(text)
+
+			// 1. write encoded PNG data to buffer
+			var buf bytes.Buffer
+			if err := g.Render(graph, graphviz.PNG, &buf); err != nil {
+				log.Fatal(err)
+			}
+
+			//Creando Directorio
+			directorio := ""
+			carpetas := strings.Split(path, "/")
+
+			for j := 0; j < len(carpetas)-1; j++ {
+				directorio += carpetas[j] + "/"
+			}
+
+			directorio = strings.TrimRight(directorio, "/")
+			crearDirectorioSiNoExiste(directorio)
+
+			// 3. write to file directly
+			if err := g.RenderFilename(graph, graphviz.PNG, path); err != nil {
+				log.Fatal(err)
+			}
+			break
+		}
+	}
+}
+
+//Montar Disco
+func montar_disco(commandArray []string) string {
+	path := ""
+	name := ""
+	salida := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-path=\"") {
+			ultimo := data[len(data)-1:]
+			path = data
+			indice := i + 1
+			for ultimo != "\"" {
+				path += " " + strings.ToLower(commandArray[indice])
+				ultimo = path[len(path)-1:]
+				indice++
+			}
+			i = indice - 1
+			path = strings.Replace(path, "-path=", "", 1)
+			path = strings.Replace(path, "\"", "", 2)
+		} else if strings.Contains(data, "-path=") {
+			path = strings.Replace(data, "-path=", "", 1)
+		} else if strings.Contains(data, "-name=") {
+			name = strings.Replace(data, "-name=", "", 1)
+			name = strings.Replace(name, "\"", "", 2)
+		} else {
+			salida += "Parámetro no identificado.\\n"
 		}
 	}
 
@@ -213,7 +392,7 @@ func montar_disco(commandArray []string) string {
 		if !encontrado {
 			cant++
 		}
-		return "Disco " + nuevoDisco.id + " montado."
+		return salida + "Disco " + nuevoDisco.id + " montado."
 	} else {
 		return msg_parametrosObligatorios()
 	}
@@ -253,6 +432,7 @@ func crear_particion(commandArray []string) string {
 	tipo := " "
 	fit := " "
 	name := ""
+	salida := ""
 
 	// Lectura de parametros del comando
 	for i := 0; i < len(commandArray); i++ {
@@ -292,6 +472,8 @@ func crear_particion(commandArray []string) string {
 			path = strings.Replace(path, "\"", "", 2)
 		} else if strings.Contains(data, "-path=") {
 			path = strings.Replace(data, "-path=", "", 1)
+		} else {
+			salida += "Parametro no identificado.\\n"
 		}
 	}
 
@@ -312,7 +494,7 @@ func crear_particion(commandArray []string) string {
 			copy(nuevaP.Size[:], strconv.Itoa(tamano))
 		} else {
 			fmt.Print("Error: Dimensional No Reconocida.")
-			return "Error -> Dimensional No Reconocida."
+			return salida + "Error -> Dimensional No Reconocida."
 		}
 
 		// Calculo de FIT
@@ -324,7 +506,7 @@ func crear_particion(commandArray []string) string {
 			copy(nuevaP.Fit[:], "WF")
 		} else {
 			fmt.Print("Error: Fit No Reconocido.")
-			return "Error -> Fit No Reconocido."
+			return salida + "Error -> Fit No Reconocido."
 		}
 
 		// Tipo de Particion
