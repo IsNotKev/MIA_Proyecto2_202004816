@@ -52,6 +52,7 @@ type DiscoMontado = struct {
 	name string
 	id   string
 	mbr  MBR
+	num  int
 }
 
 type cmdstruct struct {
@@ -59,6 +60,7 @@ type cmdstruct struct {
 }
 
 var discos = [20]DiscoMontado{} //Discos Montados
+var cant = 1
 
 func main() {
 	//analizar()
@@ -187,16 +189,59 @@ func montar_disco(commandArray []string) string {
 		nuevoDisco.path = path
 
 		cont := 0
+		encontrado := false
+		numaux := -1
 		for i := 0; i < len(discos); i++ {
 			if discos[i].path == "" {
-
+				letra := obtenerLetra(cont)
+				if numaux >= 0 {
+					nuevoDisco.num = numaux
+				} else {
+					nuevoDisco.num = cant
+				}
+				nuevoDisco.id = "06" + strconv.Itoa(nuevoDisco.num) + letra
+				//fmt.Println(nuevoDisco.id)
+				discos[i] = nuevoDisco
+				break
 			} else if discos[i].path == path {
 				cont++
+				numaux = discos[i].num
+				encontrado = true
 			}
 		}
-		return "Disco montado."
+
+		if !encontrado {
+			cant++
+		}
+		return "Disco " + nuevoDisco.id + " montado."
 	} else {
 		return msg_parametrosObligatorios()
+	}
+}
+
+func obtenerLetra(num int) string {
+	if num == 0 {
+		return "a"
+	} else if num == 1 {
+		return "b"
+	} else if num == 2 {
+		return "c"
+	} else if num == 3 {
+		return "d"
+	} else if num == 4 {
+		return "e"
+	} else if num == 5 {
+		return "f"
+	} else if num == 6 {
+		return "g"
+	} else if num == 7 {
+		return "h"
+	} else if num == 8 {
+		return "i"
+	} else if num == 9 {
+		return "j"
+	} else {
+		return "k"
 	}
 }
 
@@ -781,14 +826,14 @@ func leerMBR(ruta string) MBR {
 
 	mbrleido := bytes_to_struct(lectura)
 
-	fmt.Print("Fecha: ")
-	fmt.Println(string(mbrleido.Fecha[:]))
-	fmt.Print("Firma: ")
-	fmt.Println(string(mbrleido.Signature[:]))
-	fmt.Print("Tamaño: ")
-	fmt.Println(string(mbrleido.Tamano[:]))
-	fmt.Print("Fit: ")
-	fmt.Println(string(mbrleido.Fit[:]))
+	//fmt.Print("Fecha: ")
+	//fmt.Println(string(mbrleido.Fecha[:]))
+	//fmt.Print("Firma: ")
+	//fmt.Println(string(mbrleido.Signature[:]))
+	//fmt.Print("Tamaño: ")
+	//fmt.Println(string(mbrleido.Tamano[:]))
+	//fmt.Print("Fit: ")
+	//fmt.Println(string(mbrleido.Fit[:]))
 
 	return mbrleido
 }

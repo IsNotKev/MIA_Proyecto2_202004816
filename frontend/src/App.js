@@ -21,23 +21,29 @@ function App() {
   }
 
   function ejecutar(){
-    var obj = { 'cmd': document.getElementById('Instrucciones').value }
-    fetch(`http://localhost:5000/ejecutar`, {
-      method: 'POST',
-      body: JSON.stringify(obj),
-    })
-      .then(res => res.json())
-      .catch(err => {
-        console.error('Error:', err)
-        alert("Ocurrio un error, ver la consola")
+    if (document.getElementById('Instrucciones').value !== ""){
+      var obj = { 'cmd': document.getElementById('Instrucciones').value }
+      fetch(`http://localhost:5000/ejecutar`, {
+        method: 'POST',
+        body: JSON.stringify(obj),
       })
-      .then(response => {
-        document.getElementById('Resultado').value = response.result;
-      })
+        .then(res => res.json())
+        .catch(err => {
+          console.error('Error:', err)
+          alert("Ocurrio un error, ver la consola")
+        })
+        .then(response => {
+          document.getElementById('Resultado').value = response.result;
+        })
+    }else{
+      alert('Consola Vacía')
+    }
+    
   }
 
   return (
     <div className="App" style={{width:'80%', margin:'auto', marginTop:'2%'}}>
+
       <h1 style={{marginBottom:'10%'}}> Cargar Instrucciones </h1>
       <input required class="form-control" type="file" id="file-input" onChange={leerArchivo} style={{ marginTop: '2%', width: '50%' }}></input>
       <br></br>
