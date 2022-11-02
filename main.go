@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
@@ -118,6 +119,7 @@ var discos = [20]DiscoMontado{} //Discos Montados
 var cant = 1
 var ultimoG = ""
 var usuarioLogueado = Usuario{}
+var reporte = ""
 
 func main() {
 	//analizar()
@@ -137,9 +139,32 @@ func main() {
 		w.Write([]byte(`{"result": "` + respuesta + `" }`))
 	})
 
+	mux.HandleFunc("/reporte", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		bytes, err := ioutil.ReadFile(reporte)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		base64Encoding := ""
+		// Determine the content type of the image file
+		base64Encoding += "data:image/png;base64,"
+		base64Encoding += toBase64(bytes)
+
+		respuesta := base64Encoding
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"result": "` + respuesta + `" }`))
+	})
+
 	fmt.Println("Server ON in port 5000")
 	handler := cors.Default().Handler(mux)
 	log.Fatal(http.ListenAndServe(":5000", handler))
+}
+
+func toBase64(b []byte) string {
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 func analizar(cmd string) string {
@@ -164,7 +189,9 @@ func analizar(cmd string) string {
 
 	for i := 0; i < len(instrucciones); i++ {
 		comando := instrucciones[i]
-		if comando != "" && comando != "exit\n" {
+		if strings.Contains(comando, "#") {
+			continue
+		} else if comando != "" && comando != "exit\n" {
 			//  Separacion de comando y parametros
 			salida += split_comando(comando) + "\\n"
 		}
@@ -216,15 +243,109 @@ func ejecucion_comando(commandArray []string) string {
 		return eliminarGrupo(commandArray)
 	} else if data == "mkuser" {
 		return crearUsuario(commandArray)
+	} else if data == "mkfile" {
+		return crearFile(commandArray)
+	} else if data == "mkdir" {
+		return crearDir(commandArray)
 	} else if data == "rmuser" {
 		return eliminarUsuario(commandArray)
 	} else if data == "pause" {
-		return "Pausa ..."
+		return "\\n> Pausa ...\\n"
 	} else if data == "rep" {
 		return procesarRep(commandArray)
 	} else {
 		fmt.Println("Comando ingresado no es valido")
 		return "Comando ingresado no es valido"
+	}
+}
+
+func crearFile(commandArray []string) string {
+	path := ""
+	r := false
+	tamano := 0
+	cont := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-size=") {
+			strtam := strings.Replace(data, "-size=", "", 1)
+			strtam = strings.Replace(strtam, "\"", "", 2)
+			strtam = strings.Replace(strtam, "\r", "", 1)
+			tamano2, err := strconv.Atoi(strtam)
+			tamano = tamano2
+			if err != nil {
+				msg_error(err)
+			}
+		} else if strings.Contains(data, "-r") {
+			r = true
+		} else if strings.Contains(data, "-cont=") {
+			cont = strings.Replace(data, "-cont=", "", 1)
+			cont = strings.Replace(cont, "\"", "", 2)
+		} else if strings.Contains(data, "-path=\"") {
+			ultimo := data[len(data)-1:]
+			path = data
+			indice := i + 1
+			for ultimo != "\"" {
+				path += " " + strings.ToLower(commandArray[indice])
+				ultimo = path[len(path)-1:]
+				indice++
+			}
+			i = indice - 1
+			path = strings.Replace(path, "-path=", "", 1)
+			path = strings.Replace(path, "\"", "", 2)
+		} else if strings.Contains(data, "-path=") {
+			path = strings.Replace(data, "-path=", "", 1)
+		}
+	}
+
+	if path != "" {
+		if tamano < 0 {
+			return "No se puede crear File con size negativo."
+		}
+		if r {
+			return " > Se creo un nuevo archivo recursivo."
+		} else {
+			return " > Se creo un nuevo archivo."
+		}
+	} else {
+		return msg_parametrosObligatorios()
+	}
+
+}
+
+func crearDir(commandArray []string) string {
+	path := ""
+	p := false
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-p") {
+			p = true
+		} else if strings.Contains(data, "-path=\"") {
+			ultimo := data[len(data)-1:]
+			path = data
+			indice := i + 1
+			for ultimo != "\"" {
+				path += " " + strings.ToLower(commandArray[indice])
+				ultimo = path[len(path)-1:]
+				indice++
+			}
+			i = indice - 1
+			path = strings.Replace(path, "-path=", "", 1)
+			path = strings.Replace(path, "\"", "", 2)
+		} else if strings.Contains(data, "-path=") {
+			path = strings.Replace(data, "-path=", "", 1)
+		}
+	}
+
+	if path != "" {
+		if p {
+			return " > Se creo un nuevo directorio recursivo."
+		} else {
+			return " > Se creo un nuevo directorio."
+		}
+	} else {
+		return msg_parametrosObligatorios()
 	}
 }
 
@@ -264,7 +385,6 @@ func eliminarUsuario(commandArray []string) string {
 	} else {
 		return msg_parametrosObligatorios()
 	}
-
 }
 
 func eliminarUs(usuario string, texto string) string {
@@ -800,6 +920,7 @@ func repDisk(path string, id string) string {
 			if err := g.RenderFilename(graph, graphviz.PNG, path); err != nil {
 				log.Fatal(err)
 			}
+			reporte = path
 			return "Reporte Disk Creado"
 		}
 	}
@@ -847,6 +968,11 @@ func montar_disco(commandArray []string) string {
 		encontrado := false
 		numaux := -1
 		for i := 0; i < len(discos); i++ {
+
+			if discos[i].name == name && discos[i].path == path {
+				return "No se puede montar una particón que ya está montada."
+			}
+
 			if discos[i].path == "" {
 				letra := obtenerLetra(cont)
 				if numaux >= 0 {
@@ -1550,7 +1676,7 @@ func eliminar_disco(commandArray []string) string {
 		err := os.Remove(path)
 		if err != nil {
 			fmt.Printf("Error eliminando archivo: %v\n", err)
-			return "<Error> eliminando archivo:"
+			return "No existe el disco para elminar."
 		} else {
 			fmt.Println("Eliminado correctamente")
 			return "> Disco eliminado correctamente."
