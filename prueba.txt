@@ -8,9 +8,9 @@ fdisk -Size=1 -path=/home/oem/tmp/Disco1.dk -name=Part3
 mount -path=/home/oem/tmp/Disco1.dk -name=Part1
 mount -path=/home/oem/tmp/Disco1.dk -name=Part2
 
-mkfs -id=061a
+mkfs -id=161a
 
-login -id=061a -password=123 -usuario=root
+login -id=161a -password=123 -usuario=root
 
 mkgrp -name=root
 mkgrp -name=nuevoG

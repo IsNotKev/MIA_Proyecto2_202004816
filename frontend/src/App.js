@@ -41,8 +41,25 @@ function App() {
     
   }
 
+  function login(){
+      var texto = "login -password=" + document.getElementById('inputContra').value + " -usuario=" + document.getElementById('inputUser').value + " -id=" + document.getElementById('inputDisco').value
+      var obj = { 'cmd':  texto}
+      fetch(`http://localhost:5000/ejecutar`, {
+        method: 'POST',
+        body: JSON.stringify(obj),
+      })
+        .then(res => res.json())
+        .catch(err => {
+          console.error('Error:', err)
+          alert("Ocurrio un error, ver la consola")
+        })
+        .then(response => {
+          document.getElementById('Resultado').value = response.result;
+        })
+  }
+
   function verRep(){
-    var obj = { 'cmd': document.getElementById('Instrucciones').value }
+    var obj = { 'cmd': 'Reporte'}
       fetch(`http://localhost:5000/reporte`, {
         method: 'POST',
         body: JSON.stringify(obj),
@@ -55,7 +72,7 @@ function App() {
         .then(response => {
           var image = new Image();
           image.src = response.result
-          document.getElementById('RepDiv').appendChild(image);
+          document.getElementById('RepDiv').appendChild(image);    
         })
   }
 
@@ -139,7 +156,7 @@ function App() {
                 </div>
               </div>
               <div class="col-auto">
-                <button type="submit" class="btn btn-primary mb-3">Ingresar</button>
+                <button type="button" class="btn btn-primary mb-3" onClick={login}>Ingresar</button>
               </div>
 
             </div>

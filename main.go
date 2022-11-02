@@ -141,18 +141,21 @@ func main() {
 
 	mux.HandleFunc("/reporte", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		respuesta := ""
+		if reporte != "" {
+			bytes, err := ioutil.ReadFile(reporte)
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		bytes, err := ioutil.ReadFile(reporte)
-		if err != nil {
-			log.Fatal(err)
+			base64Encoding := ""
+			// Determine the content type of the image file
+			base64Encoding += "data:image/png;base64,"
+			base64Encoding += toBase64(bytes)
+
+			respuesta = base64Encoding
+
 		}
-
-		base64Encoding := ""
-		// Determine the content type of the image file
-		base64Encoding += "data:image/png;base64,"
-		base64Encoding += toBase64(bytes)
-
-		respuesta := base64Encoding
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"result": "` + respuesta + `" }`))
@@ -241,13 +244,13 @@ func ejecucion_comando(commandArray []string) string {
 		return crearGrupo(commandArray)
 	} else if data == "rmgrp" {
 		return eliminarGrupo(commandArray)
-	} else if data == "mkuser" {
+	} else if data == "mkusr" {
 		return crearUsuario(commandArray)
 	} else if data == "mkfile" {
 		return crearFile(commandArray)
 	} else if data == "mkdir" {
 		return crearDir(commandArray)
-	} else if data == "rmuser" {
+	} else if data == "rmusr" {
 		return eliminarUsuario(commandArray)
 	} else if data == "pause" {
 		return "\\n> Pausa ...\\n"
@@ -310,7 +313,6 @@ func crearFile(commandArray []string) string {
 	} else {
 		return msg_parametrosObligatorios()
 	}
-
 }
 
 func crearDir(commandArray []string) string {
@@ -319,9 +321,7 @@ func crearDir(commandArray []string) string {
 	// Lectura de parametros del comando
 	for i := 0; i < len(commandArray); i++ {
 		data := strings.ToLower(commandArray[i])
-		if strings.Contains(data, "-p") {
-			p = true
-		} else if strings.Contains(data, "-path=\"") {
+		if strings.Contains(data, "-path=\"") {
 			ultimo := data[len(data)-1:]
 			path = data
 			indice := i + 1
@@ -335,6 +335,8 @@ func crearDir(commandArray []string) string {
 			path = strings.Replace(path, "\"", "", 2)
 		} else if strings.Contains(data, "-path=") {
 			path = strings.Replace(data, "-path=", "", 1)
+		} else if strings.Contains(data, "-p") {
+			p = true
 		}
 	}
 
@@ -356,6 +358,7 @@ func eliminarUsuario(commandArray []string) string {
 		data := strings.ToLower(commandArray[i])
 		if strings.Contains(data, "-usuario=") {
 			usuario = strings.Replace(data, "-usuario=", "", 1)
+			usuario = strings.Replace(usuario, "\"", "", 2)
 		}
 	}
 
@@ -418,6 +421,7 @@ func crearUsuario(commandArray []string) string {
 		data := strings.ToLower(commandArray[i])
 		if strings.Contains(data, "-usuario=") {
 			usuario = strings.Replace(data, "-usuario=", "", 1)
+			usuario = strings.Replace(usuario, "\"", "", 4)
 		} else if strings.Contains(data, "-pwd=") {
 			contra = strings.Replace(data, "-pwd=", "", 1)
 		} else if strings.Contains(data, "-grp=") {
@@ -675,7 +679,7 @@ func procesarLogin(commandArray []string) string {
 				if verificarLogin(usuario, contra, string(content)) {
 					usuarioLogueado.id = id
 					usuarioLogueado.ruta = directorio
-					return "> " + usuario + " logueado en" + id + "."
+					return "> " + usuario + " logueado en " + id + "."
 				} else {
 					return "> Credenciales incorrectas para login en " + id + "."
 				}
@@ -798,7 +802,7 @@ func procesarRep(commandArray []string) string {
 		} else if name == "tree" {
 			return "Reporte Tree Creado"
 		} else if name == "file" {
-			return "Reporte File Creado"
+			return repFile(path, id, ruta)
 		} else if name == "sb" {
 			return "Reporte SB Creado"
 		}
@@ -806,6 +810,40 @@ func procesarRep(commandArray []string) string {
 	} else {
 		return msg_parametrosObligatorios()
 	}
+}
+
+func repFile(path string, id string, ruta string) string {
+	if ruta == "" {
+		return "No se especifico ruta para reporte File"
+	}
+
+	for i := 0; i < len(discos); i++ {
+		if discos[i].id == id {
+			salida := "\\nReporte File -- " + ruta + ":\\n"
+			if ruta == "/users.txt" {
+				//Creando Directorio
+				directorio := ""
+				carpetas := strings.Split(discos[i].path, "/")
+
+				for j := 0; j < len(carpetas)-1; j++ {
+					directorio += carpetas[j] + "/"
+				}
+
+				directorio += "users.txt"
+
+				content, err := ioutil.ReadFile(directorio)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				salida = salida + strings.ReplaceAll(string(content), "\n", "\\n") + "\\n"
+			}
+			return salida
+		}
+	}
+
+	return "No se encontro disco montado para Reporte File"
 }
 
 func repDisk(path string, id string) string {
@@ -980,7 +1018,7 @@ func montar_disco(commandArray []string) string {
 				} else {
 					nuevoDisco.num = cant
 				}
-				nuevoDisco.id = "06" + strconv.Itoa(nuevoDisco.num) + letra
+				nuevoDisco.id = "16" + strconv.Itoa(nuevoDisco.num) + letra
 				//fmt.Println(nuevoDisco.id)
 				discos[i] = nuevoDisco
 				break
@@ -1676,7 +1714,7 @@ func eliminar_disco(commandArray []string) string {
 		err := os.Remove(path)
 		if err != nil {
 			fmt.Printf("Error eliminando archivo: %v\n", err)
-			return "No existe el disco para elminar."
+			return "No existe el disco para eliminar."
 		} else {
 			fmt.Println("Eliminado correctamente")
 			return "> Disco eliminado correctamente."
