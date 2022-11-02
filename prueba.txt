@@ -2,3 +2,18 @@ mkdisk -Size=3 -unit=M -path=/home/oem/tmp/Disco1.dk -fit=BF
 fdisk -Size=1 -path=/home/oem/tmp/Disco1.dk -name=Part1
 fdisk -Size=2 -type=E -unit=M -path=/home/oem/tmp/Disco1.dk -name=Part2
 fdisk -Size=1 -type=L -unit=M -path=/home/oem/tmp/Disco1.dk -name=Part1L
+fdisk -Size=10 -type=L -unit=K -path=/home/oem/tmp/Disco1.dk -name=Part2L
+fdisk -Size=1 -path=/home/oem/tmp/Disco1.dk -name=Part3
+
+mount -path=/home/oem/tmp/Disco1.dk -name=Part1
+mount -path=/home/oem/tmp/Disco1.dk -name=Part2
+
+mkfs -id=061a
+
+login -id=061a -password=123 -usuario=root
+
+mkgrp -name=root
+mkgrp -name=nuevoG
+mkgrp -name=nuevoG
+logout
+mkgrp -name=nuevoG2

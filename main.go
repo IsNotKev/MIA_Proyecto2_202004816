@@ -111,10 +111,12 @@ type Usuario struct {
 	contra  string
 	id      string
 	ruta    string
+	nogrupo string
 }
 
 var discos = [20]DiscoMontado{} //Discos Montados
 var cant = 1
+var ultimoG = ""
 var usuarioLogueado = Usuario{}
 
 func main() {
@@ -208,6 +210,10 @@ func ejecucion_comando(commandArray []string) string {
 		return procesarLogin(commandArray)
 	} else if data == "logout" {
 		return procesarLogout(commandArray)
+	} else if data == "mkgrp" {
+		return crearGrupo(commandArray)
+	} else if data == "rmgrp" {
+		return eliminarGrupo(commandArray)
 	} else if data == "pause" {
 		return "Pausa ..."
 	} else if data == "rep" {
@@ -218,6 +224,144 @@ func ejecucion_comando(commandArray []string) string {
 	}
 }
 
+func eliminarGrupo(commandArray []string) string {
+	name := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-name=") {
+			name = strings.Replace(data, "-name=", "", 1)
+		}
+	}
+
+	if name != "" {
+		if usuarioLogueado.usuario != "" {
+			if usuarioLogueado.usuario == "root" && usuarioLogueado.nogrupo == "1" {
+				content, err := ioutil.ReadFile(usuarioLogueado.ruta)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if verificarGrupo(name, string(content)) {
+
+					nuevoContent := eliminarG(name, string(content))
+					b := []byte(nuevoContent)
+					err = ioutil.WriteFile(usuarioLogueado.ruta, b, 0644)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					return "> Grupo " + name + " eliminado."
+				} else {
+					return "Grupo " + name + " no existe."
+				}
+			} else {
+				return "Solo el usuario root puede eliminar grupos."
+			}
+		} else {
+			return "No hay usuario en sesión para eliminar grupo."
+		}
+	} else {
+		return msg_parametrosObligatorios()
+	}
+}
+
+func eliminarG(nombre string, texto string) string {
+	usuariosArray := strings.Split(texto, "\n")
+
+	nuevoT := ""
+
+	for i := 0; i < len(usuariosArray); i++ {
+		usuarioLeido := strings.Replace(usuariosArray[i], " ", "", 10)
+		credencialesLeidas := strings.Split(usuarioLeido, ",")
+
+		aux := usuariosArray[i] + "\n"
+
+		if credencialesLeidas[1] == "G" {
+			if credencialesLeidas[2] == nombre {
+				aux = "0, " + credencialesLeidas[1] + ", " + credencialesLeidas[2] + "\n"
+			}
+		}
+		nuevoT += aux
+	}
+	nuevoT = strings.TrimRight(nuevoT, "\n")
+	return nuevoT
+}
+
+func crearGrupo(commandArray []string) string {
+	name := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-name=") {
+			name = strings.Replace(data, "-name=", "", 1)
+		}
+	}
+
+	if name != "" {
+
+		if usuarioLogueado.usuario != "" {
+			if usuarioLogueado.usuario == "root" && usuarioLogueado.nogrupo == "1" {
+				content, err := ioutil.ReadFile(usuarioLogueado.ruta)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if !verificarGrupo(name, string(content)) {
+					ultimo, err := strconv.Atoi(ultimoG)
+					if err != nil {
+						msg_error(err)
+					}
+					ultimo++
+
+					nuevoG := strconv.Itoa(ultimo)
+
+					nuevoContent := string(content) + "\n" + nuevoG + ", G, " + name
+
+					b := []byte(nuevoContent)
+					err = ioutil.WriteFile(usuarioLogueado.ruta, b, 0644)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					return "> Grupo " + name + " creado."
+				} else {
+					return "Grupo " + name + " ya existe."
+				}
+
+			} else {
+				return "Solo el usuario root puede crear grupos."
+			}
+		} else {
+			return "No hay usuario en sesión para crear grupo."
+		}
+
+	} else {
+		return msg_parametrosObligatorios()
+	}
+}
+
+func verificarGrupo(name string, texto string) bool {
+	usuariosArray := strings.Split(texto, "\n")
+
+	for i := 0; i < len(usuariosArray); i++ {
+		usuarioLeido := strings.Replace(usuariosArray[i], " ", "", 10)
+		credencialesLeidas := strings.Split(usuarioLeido, ",")
+
+		if credencialesLeidas[1] == "G" {
+			if credencialesLeidas[2] == name {
+				return true
+			}
+			if credencialesLeidas[0] != "0" {
+				ultimoG = credencialesLeidas[0]
+			}
+		}
+	}
+	return false
+}
+
 func procesarLogout(commandArray []string) string {
 	if usuarioLogueado.usuario != "" {
 		aux := usuarioLogueado.usuario
@@ -225,7 +369,8 @@ func procesarLogout(commandArray []string) string {
 		usuarioLogueado.contra = ""
 		usuarioLogueado.ruta = ""
 		usuarioLogueado.id = ""
-		return " > Cerrando sesión de " + aux
+		usuarioLogueado.nogrupo = ""
+		return "> Cerrando sesión de " + aux
 	} else {
 		return "No hay sesión activa que cerrar."
 	}
@@ -248,6 +393,10 @@ func procesarLogin(commandArray []string) string {
 	}
 
 	if usuario != "" && contra != "" && id != "" {
+		if usuarioLogueado.usuario != "" {
+			return "Ya hay un usuario logueado."
+		}
+
 		for i := 0; i < len(discos); i++ {
 			if discos[i].id == id {
 
@@ -265,10 +414,6 @@ func procesarLogin(commandArray []string) string {
 
 				if err != nil {
 					log.Fatal(err)
-				}
-
-				if usuarioLogueado.usuario != "" {
-					return "Ya hay un usuario logueado."
 				}
 
 				if verificarLogin(usuario, contra, string(content)) {
@@ -298,6 +443,7 @@ func verificarLogin(usuario string, contra string, texto string) bool {
 			if credencialesLeidas[3] == usuario && credencialesLeidas[4] == contra {
 				usuarioLogueado.usuario = usuario
 				usuarioLogueado.contra = contra
+				usuarioLogueado.nogrupo = credencialesLeidas[0]
 				return true
 			}
 		}
