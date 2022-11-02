@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -57,12 +58,64 @@ type DiscoMontado = struct {
 	num  int
 }
 
+type SuperBloque = struct {
+	s_filesystem_type   [100]byte
+	s_inodes_count      [100]byte
+	s_blocks_count      [100]byte
+	s_free_blocks_count [100]byte
+	s_free_inodes_count [100]byte
+	s_mtime             [100]byte
+	s_mnt_count         [100]byte
+	s_magic             [100]byte
+	s_inode_size        [100]byte
+	s_block_size        [100]byte
+	s_firts_ino         [100]byte
+	s_first_blo         [100]byte
+	s_bm_inode_start    [100]byte
+	s_bm_block_start    [100]byte
+	s_inode_start       [100]byte
+	s_block_start       [100]byte
+}
+
+type TablaInodos = struct {
+	i_uid   [100]byte
+	i_gid   [100]byte
+	i_size  [100]byte
+	i_atime [100]byte
+	i_ctime [100]byte
+	i_mtime [100]byte
+	i_block [100]byte
+	i_type  [100]byte
+	i_perm  [100]byte
+}
+
+type BloqueArchivo = struct {
+	b_content [100]byte
+}
+
+type BloqueCarpeta = struct {
+	b_content [4]Content
+}
+
+type Content = struct {
+	b_name  [100]byte
+	b_inodo [100]byte
+}
+
 type cmdstruct struct {
 	Cmd string `json:"cmd"`
 }
 
+type Usuario struct {
+	usuario string
+	contra  string
+	id      string
+	ruta    string
+}
+
 var discos = [20]DiscoMontado{} //Discos Montados
 var cant = 1
+var usuarioLogueado = Usuario{}
 
 func main() {
 	//analizar()
@@ -149,6 +202,12 @@ func ejecucion_comando(commandArray []string) string {
 		return crear_particion(commandArray)
 	} else if data == "mount" {
 		return montar_disco(commandArray)
+	} else if data == "mkfs" {
+		return procesarMkfs(commandArray)
+	} else if data == "login" {
+		return procesarLogin(commandArray)
+	} else if data == "logout" {
+		return procesarLogout(commandArray)
 	} else if data == "pause" {
 		return "Pausa ..."
 	} else if data == "rep" {
@@ -156,6 +215,142 @@ func ejecucion_comando(commandArray []string) string {
 	} else {
 		fmt.Println("Comando ingresado no es valido")
 		return "Comando ingresado no es valido"
+	}
+}
+
+func procesarLogout(commandArray []string) string {
+	if usuarioLogueado.usuario != "" {
+		aux := usuarioLogueado.usuario
+		usuarioLogueado.usuario = ""
+		usuarioLogueado.contra = ""
+		usuarioLogueado.ruta = ""
+		usuarioLogueado.id = ""
+		return " > Cerrando sesión de " + aux
+	} else {
+		return "No hay sesión activa que cerrar."
+	}
+}
+
+func procesarLogin(commandArray []string) string {
+	usuario := ""
+	contra := ""
+	id := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-id=") {
+			id = strings.Replace(data, "-id=", "", 1)
+		} else if strings.Contains(data, "-password=") {
+			contra = strings.Replace(data, "-password=", "", 1)
+		} else if strings.Contains(data, "-usuario=") {
+			usuario = strings.Replace(data, "-usuario=", "", 1)
+		}
+	}
+
+	if usuario != "" && contra != "" && id != "" {
+		for i := 0; i < len(discos); i++ {
+			if discos[i].id == id {
+
+				//Creando Directorio
+				directorio := ""
+				carpetas := strings.Split(discos[i].path, "/")
+
+				for j := 0; j < len(carpetas)-1; j++ {
+					directorio += carpetas[j] + "/"
+				}
+
+				directorio += "users.txt"
+
+				content, err := ioutil.ReadFile(directorio)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if usuarioLogueado.usuario != "" {
+					return "Ya hay un usuario logueado."
+				}
+
+				if verificarLogin(usuario, contra, string(content)) {
+					usuarioLogueado.id = id
+					usuarioLogueado.ruta = directorio
+					return "> " + usuario + " logueado en" + id + "."
+				} else {
+					return "> Credenciales incorrectas para login en " + id + "."
+				}
+			}
+		}
+
+		return "No se encontro id para Login."
+	} else {
+		return msg_parametrosObligatorios()
+	}
+}
+
+func verificarLogin(usuario string, contra string, texto string) bool {
+	usuariosArray := strings.Split(texto, "\n")
+
+	for i := 0; i < len(usuariosArray); i++ {
+		usuarioLeido := strings.Replace(usuariosArray[i], " ", "", 10)
+		credencialesLeidas := strings.Split(usuarioLeido, ",")
+
+		if credencialesLeidas[1] == "U" {
+			if credencialesLeidas[3] == usuario && credencialesLeidas[4] == contra {
+				usuarioLogueado.usuario = usuario
+				usuarioLogueado.contra = contra
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func procesarMkfs(commandArray []string) string {
+	id := ""
+	tipo := ""
+
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-id=") {
+			id = strings.Replace(data, "-id=", "", 1)
+		} else if strings.Contains(data, "-type=") {
+			tipo = strings.Replace(data, "-type=", "", 1)
+		}
+	}
+
+	if id != "" {
+		if tipo == "full" || tipo == "" {
+
+			for i := 0; i < len(discos); i++ {
+				if discos[i].id == id {
+
+					//Creando Directorio
+					directorio := ""
+					carpetas := strings.Split(discos[i].path, "/")
+
+					for j := 0; j < len(carpetas)-1; j++ {
+						directorio += carpetas[j] + "/"
+					}
+
+					directorio += "users.txt"
+
+					b := []byte("1, G, root \n1, U, root, root, 123")
+					err := ioutil.WriteFile(directorio, b, 0644)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					return "> " + id + " Formateado con ext2."
+				}
+			}
+
+			return "No se encontro id para MKFS."
+		} else {
+			return "Tipo de Formateo no reconocido."
+		}
+	} else {
+		return msg_parametrosObligatorios()
 	}
 }
 
@@ -197,8 +392,7 @@ func procesarRep(commandArray []string) string {
 
 	if name != "" && path != "" && id != "" {
 		if name == "disk" {
-			repDisk(path, id)
-			return "Reporte Disk Creado"
+			return repDisk(path, id)
 		} else if name == "tree" {
 			return "Reporte Tree Creado"
 		} else if name == "file" {
@@ -212,7 +406,7 @@ func procesarRep(commandArray []string) string {
 	}
 }
 
-func repDisk(path string, id string) {
+func repDisk(path string, id string) string {
 	for i := 0; i < len(discos); i++ {
 		if discos[i].id == id {
 			mbrleido := leerMBR(discos[i].path)
@@ -324,9 +518,10 @@ func repDisk(path string, id string) {
 			if err := g.RenderFilename(graph, graphviz.PNG, path); err != nil {
 				log.Fatal(err)
 			}
-			break
+			return "Reporte Disk Creado"
 		}
 	}
+	return "No se encontro disco montado para Reporte Disk"
 }
 
 //Montar Disco
@@ -354,12 +549,11 @@ func montar_disco(commandArray []string) string {
 		} else if strings.Contains(data, "-name=") {
 			name = strings.Replace(data, "-name=", "", 1)
 			name = strings.Replace(name, "\"", "", 2)
-		} else {
-			salida += "Parámetro no identificado.\\n"
 		}
 	}
 
 	if path != "" && name != "" {
+		salida += "\\nDiscos Montados: \\n"
 		mbrleido := leerMBR(path)
 		nuevoDisco := DiscoMontado{}
 
@@ -386,13 +580,16 @@ func montar_disco(commandArray []string) string {
 				cont++
 				numaux = discos[i].num
 				encontrado = true
+				salida += "    > " + discos[i].id + "\\n"
+			} else {
+				salida += "    > " + discos[i].id + "\\n"
 			}
 		}
 
 		if !encontrado {
 			cant++
 		}
-		return salida + "Disco " + nuevoDisco.id + " montado."
+		return salida + "Disco " + nuevoDisco.id + " montado.\\n"
 	} else {
 		return msg_parametrosObligatorios()
 	}
@@ -982,6 +1179,9 @@ func crear_particion(commandArray []string) string {
 			return "Error -> Tipo de particion no existe -> " + tt
 		}
 		escribirMBR(mbrleido, path)
+		if tipo == " " {
+			return "> Partición p creada."
+		}
 		return "> Partición " + tipo + " creada."
 	} else {
 		return msg_parametrosObligatorios()
