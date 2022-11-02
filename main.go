@@ -214,6 +214,10 @@ func ejecucion_comando(commandArray []string) string {
 		return crearGrupo(commandArray)
 	} else if data == "rmgrp" {
 		return eliminarGrupo(commandArray)
+	} else if data == "mkuser" {
+		return crearUsuario(commandArray)
+	} else if data == "rmuser" {
+		return eliminarUsuario(commandArray)
 	} else if data == "pause" {
 		return "Pausa ..."
 	} else if data == "rep" {
@@ -222,6 +226,138 @@ func ejecucion_comando(commandArray []string) string {
 		fmt.Println("Comando ingresado no es valido")
 		return "Comando ingresado no es valido"
 	}
+}
+
+func eliminarUsuario(commandArray []string) string {
+	usuario := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-usuario=") {
+			usuario = strings.Replace(data, "-usuario=", "", 1)
+		}
+	}
+
+	if usuario != "" {
+		if usuarioLogueado.usuario != "" {
+			if usuarioLogueado.usuario == "root" && usuarioLogueado.nogrupo == "1" {
+				content, err := ioutil.ReadFile(usuarioLogueado.ruta)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				nuevoContent := eliminarUs(usuario, string(content))
+				b := []byte(nuevoContent)
+				err = ioutil.WriteFile(usuarioLogueado.ruta, b, 0644)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				return "> Usuario " + usuario + " eliminado."
+			} else {
+				return "Solo el usuario root puede eliminar grupos."
+			}
+		} else {
+			return "No hay usuario en sesión para eliminar grupo."
+		}
+	} else {
+		return msg_parametrosObligatorios()
+	}
+
+}
+
+func eliminarUs(usuario string, texto string) string {
+	usuariosArray := strings.Split(texto, "\n")
+
+	nuevoT := ""
+
+	for i := 0; i < len(usuariosArray); i++ {
+		usuarioLeido := strings.Replace(usuariosArray[i], " ", "", 10)
+		credencialesLeidas := strings.Split(usuarioLeido, ",")
+
+		aux := usuariosArray[i] + "\n"
+
+		if credencialesLeidas[1] == "U" {
+			if credencialesLeidas[3] == usuario {
+				aux = "0, U, " + credencialesLeidas[2] + ", " + credencialesLeidas[3] + ", " + credencialesLeidas[4] + ", " + "\n"
+			}
+		}
+		nuevoT += aux
+	}
+	nuevoT = strings.TrimRight(nuevoT, "\n")
+	return nuevoT
+}
+
+func crearUsuario(commandArray []string) string {
+	usuario := ""
+	contra := ""
+	grp := ""
+	// Lectura de parametros del comando
+	for i := 0; i < len(commandArray); i++ {
+		data := strings.ToLower(commandArray[i])
+		if strings.Contains(data, "-usuario=") {
+			usuario = strings.Replace(data, "-usuario=", "", 1)
+		} else if strings.Contains(data, "-pwd=") {
+			contra = strings.Replace(data, "-pwd=", "", 1)
+		} else if strings.Contains(data, "-grp=") {
+			grp = strings.Replace(data, "-grp=", "", 1)
+		}
+	}
+
+	if usuario != "" && contra != "" && grp != "" {
+		if usuarioLogueado.usuario != "" {
+			if usuarioLogueado.usuario == "root" && usuarioLogueado.nogrupo == "1" {
+				content, err := ioutil.ReadFile(usuarioLogueado.ruta)
+
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if verificarGrupo(grp, string(content)) {
+
+					nuevoContent := agregarUs(usuario, contra, grp, string(content))
+					b := []byte(nuevoContent)
+					err = ioutil.WriteFile(usuarioLogueado.ruta, b, 0644)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					return "> Usuario " + usuario + " creado en " + grp + "."
+				} else {
+					return "Grupo " + grp + " no existe."
+				}
+			} else {
+				return "Solo el usuario root puede eliminar grupos."
+			}
+		} else {
+			return "No hay usuario en sesión para eliminar grupo."
+		}
+	} else {
+		return msg_parametrosObligatorios()
+	}
+}
+
+func agregarUs(usuario string, contra string, grupo string, texto string) string {
+	usuariosArray := strings.Split(texto, "\n")
+
+	nuevoT := ""
+
+	for i := 0; i < len(usuariosArray); i++ {
+		usuarioLeido := strings.Replace(usuariosArray[i], " ", "", 10)
+		credencialesLeidas := strings.Split(usuarioLeido, ",")
+
+		aux := usuariosArray[i] + "\n"
+
+		if credencialesLeidas[1] == "G" {
+			if credencialesLeidas[2] == grupo {
+				aux += credencialesLeidas[0] + ", U, " + credencialesLeidas[2] + ", " + usuario + ", " + contra + "\n"
+			}
+		}
+		nuevoT += aux
+	}
+	nuevoT = strings.TrimRight(nuevoT, "\n")
+	return nuevoT
 }
 
 func eliminarGrupo(commandArray []string) string {
@@ -351,7 +487,7 @@ func verificarGrupo(name string, texto string) bool {
 		credencialesLeidas := strings.Split(usuarioLeido, ",")
 
 		if credencialesLeidas[1] == "G" {
-			if credencialesLeidas[2] == name {
+			if credencialesLeidas[2] == name && credencialesLeidas[0] != "0" {
 				return true
 			}
 			if credencialesLeidas[0] != "0" {
